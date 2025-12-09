@@ -3,25 +3,20 @@ import { View, StyleSheet, SafeAreaView, TouchableOpacity, Text, Alert } from 'r
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
-// コンポーネント・フックのインポート
 import { Timeline } from '../../src/features/timeline/components/Timeline';
 import { useAuth } from '../../src/features/auth/useAuth';
-// ★ Push通知とHealthKitのフック
-// (ファイルが存在しない場合は、以前作成した hooks フォルダ内のファイルを復元してください)
 import { usePushNotifications } from '../../src/hooks/usePushNotifications';
 import { useHealthKit } from '../../src/hooks/useHealthKit';
+import { useUnreadCount } from '../../src/features/dm/hooks/useUnreadCount';
 
 export default function HomeScreen() {
   const router = useRouter();
   const { userProfile } = useAuth();
   
-  // 1. プッシュ通知のセットアップ (ログイン中のみ)
   const { scheduleDailyReminder } = usePushNotifications(userProfile?.uid);
-
-  // 2. ヘルスケア連携 (歩数取得)
   const { dailySteps, isAvailable } = useHealthKit();
+  const unreadCount = useUnreadCount();
 
-  // ユーザー情報が読み込まれたら、リマインダー(毎日20時)をセットする
   useEffect(() => {
     if (userProfile?.uid) {
       scheduleDailyReminder();
@@ -30,29 +25,31 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* ヘッダー */}
       <View style={styles.header}>
         <Text style={styles.title}>WOMA</Text>
         
         <View style={styles.headerRight}>
-          {/* グループボタン */}
           <TouchableOpacity onPress={() => router.push('/groups')} style={styles.iconButton}>
             <Ionicons name="people" size={24} color="#333" />
           </TouchableOpacity>
 
-          {/* ★DM一覧ボタン (追加機能) */}
           <TouchableOpacity onPress={() => router.push('/dm')} style={styles.iconButton}>
             <Ionicons name="chatbubbles-outline" size={24} color="#333" />
+            {unreadCount > 0 && (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </Text>
+              </View>
+            )}
           </TouchableOpacity>
           
-          {/* 検索ボタン */}
           <TouchableOpacity onPress={() => router.push('/search')} style={styles.iconButton}>
             <Ionicons name="search" size={24} color="#333" />
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* ★歩数サジェストカード (HealthKit有効 & 100歩以上で表示) */}
       {isAvailable && dailySteps > 100 && (
         <View style={styles.stepCard}>
           <View style={styles.stepInfo}>
@@ -78,7 +75,6 @@ export default function HomeScreen() {
         </View>
       )}
 
-      {/* タイムライン表示 */}
       <Timeline />
     </SafeAreaView>
   );
@@ -108,11 +104,29 @@ const styles = StyleSheet.create({
   },
   iconButton: {
     padding: 8,
-    backgroundColor: '#F3F4F6', // 薄いグレーの背景を追加してタップしやすく
+    backgroundColor: '#F3F4F6',
     borderRadius: 20,
+    position: 'relative', 
   },
-  
-  // 歩数カードのスタイル
+  badge: {
+    position: 'absolute',
+    top: -5,
+    right: -5,
+    backgroundColor: '#EF4444',
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'white',
+    zIndex: 10,
+  },
+  badgeText: {
+    color: 'white',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
   stepCard: {
     backgroundColor: 'white',
     margin: 16,
@@ -122,7 +136,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    // 影をつけて浮かせる
     shadowColor: '#3B82F6',
     shadowOpacity: 0.1,
     shadowRadius: 8,

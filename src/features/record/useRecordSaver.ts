@@ -17,11 +17,13 @@ export const useRecordSaver = () => {
       alert('運動内容を入力してください。');
       return false;
     }
+    // 時間が0分の運動しかない場合はアラート（入力ミスの防止）
     if (activities.every((act: any) => !act.duration || act.duration <= 0)) {
       alert('少なくとも1つの運動で時間を入力してください。');
       return false;
     }
-    if (!userProfile) {
+    // ログインチェック
+    if (!userProfile?.uid) {
       alert("ログインが必要です。");
       return false;
     }
@@ -41,6 +43,7 @@ export const useRecordSaver = () => {
           const response = await fetch(uri);
           const blob = await response.blob();
 
+          // Storageパス: exercise_images/{uid}/{timestamp}_{filename}
           const storageRef = ref(storage, `exercise_images/${userProfile.uid}/${Date.now()}_${filename}`);
           await uploadBytes(storageRef, blob);
           const url = await getDownloadURL(storageRef);
@@ -64,14 +67,14 @@ export const useRecordSaver = () => {
         };
       });
 
-      // ハッシュタグ抽出
+      // ハッシュタグ抽出 (#タグ)
       const hashtagRegex = /#\S+/g;
       const hashtags = (comment.match(hashtagRegex) || []);
 
       // --- 4. 運動記録 (exerciseRecords) 作成 ---
       const exerciseRef = doc(collection(db, "exerciseRecords"));
       batch.set(exerciseRef, {
-        userId: userProfile.uid,
+        userId: userProfile.uid, // ★ここが重要
         activities: formattedActivities,
         comment: comment.trim(),
         imageUrls: imageUrls,
@@ -86,11 +89,10 @@ export const useRecordSaver = () => {
       if (postToTimeline) {
         const timelineRef = doc(collection(db, "timeline"));
         batch.set(timelineRef, {
-          userId: userProfile.uid,
+          userId: userProfile.uid, // ★最重要: これがないとブロック機能などで不具合が出ます
           username: userProfile.username || "匿名",
-          profileImageUrl: userProfile.profileImageUrl || null,
-          comment: comment.trim(),
-          text: comment.trim(), // 互換性のため
+          userAvatar: userProfile.profileImageUrl || null, // ★追加: アイコンも保存
+          text: comment.trim(),
           createdAt: serverTimestamp(),
           exerciseId: exerciseRef.id,
           imageUrls: imageUrls,
@@ -98,7 +100,6 @@ export const useRecordSaver = () => {
           groupId: selectedGroupId || null,
           likes: 0,
           comments: 0,
-          replies: 0,
           activities: formattedActivities
         });
       }
@@ -112,15 +113,13 @@ export const useRecordSaver = () => {
           weight: weightNum,
           createdAt: serverTimestamp()
         });
+        // ユーザー情報の最新体重も更新
         const userRef = doc(db, "users", userProfile.uid);
         batch.set(userRef, { weight: weightNum }, { merge: true });
       }
 
       // --- 7. コミット ---
       await batch.commit();
-
-      // TODO: 実績解除ロジック (AchievementService) の移植
-      // const unlocked = await checkAndUnlockAchievements(...) 
 
       return true;
 

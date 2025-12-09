@@ -2,11 +2,13 @@ import React, { useState } from 'react';
 import { View, Text, Image, TouchableOpacity, StyleSheet, Alert, ActionSheetIOS, Platform, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { doc, updateDoc, increment, deleteDoc } from 'firebase/firestore';
-import { auth, db } from '../../../../firebaseConfig';
+import { db } from '../../../../firebaseConfig';
 import { RenderTextWithHashtags, timeAgo } from '../utils/timelineUtils';
 import { CommentSection } from './CommentSection';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../auth/useAuth';
+// ★追加: 安全機能フック
+import { useSafety } from '../../../hooks/useSafety';
 
 type PostProps = {
   post: {
@@ -19,7 +21,6 @@ type PostProps = {
     likes: number;
     comments?: number;
     timestamp: any;
-    // ★追加: 運動記録の配列を受け取る
     activities?: { name: string; duration: number; mets?: number }[]; 
   };
 };
@@ -27,12 +28,15 @@ type PostProps = {
 export const Post = ({ post }: PostProps) => {
   const router = useRouter();
   const { userProfile } = useAuth();
+  // ★追加: 安全機能の使用
+  const { reportContent, blockUser } = useSafety();
 
   const [liked, setLiked] = useState(false);
   const [showComments, setShowComments] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(post.text);
 
+  // ★自分かどうかの判定
   const isMe = userProfile?.uid === post.userId;
 
   const displayAvatar = (isMe && userProfile?.profileImageUrl) 
@@ -79,12 +83,21 @@ export const Post = ({ post }: PostProps) => {
 
   const showActionSheet = () => {
     const options = ['キャンセル'];
-    if (isMe) options.push('投稿を編集する', '投稿を削除する');
-    else options.push('この投稿を通報する', 'このユーザーをブロックする');
+    
+    // ★重要: 自分の投稿なら「編集・削除」、他人なら「通報・ブロック」
+    if (isMe) {
+      options.push('投稿を編集する', '投稿を削除する');
+    } else {
+      options.push('この投稿を通報する', 'このユーザーをブロックする');
+    }
 
     if (Platform.OS === 'ios') {
       ActionSheetIOS.showActionSheetWithOptions(
-        { options, cancelButtonIndex: 0, destructiveButtonIndex: isMe ? 2 : undefined },
+        { 
+          options, 
+          cancelButtonIndex: 0,
+          destructiveButtonIndex: 2 // どちらの場合も2番目の要素（削除 or ブロック）を赤字にする
+        },
         (index) => handleMenuSelect(index, options)
       );
     } else {
@@ -96,8 +109,21 @@ export const Post = ({ post }: PostProps) => {
     const selected = options[index];
     if (selected === '投稿を編集する') setIsEditing(true);
     if (selected === '投稿を削除する') handleDelete();
-    if (selected === 'この投稿を通報する') Alert.alert("完了", "通報しました。");
-    if (selected === 'このユーザーをブロックする') Alert.alert("完了", "ブロックしました。");
+    
+    // ★通報処理
+    if (selected === 'この投稿を通報する') {
+        reportContent(post.id, 'post');
+    }
+    // ★ブロック処理
+    if (selected === 'このユーザーをブロックする') {
+        if (post.userId) {
+            console.log("👉 Block requested for:", post.userId); // デバッグ用ログ
+            blockUser(post.userId);
+        } else {
+            console.error("❌ Block failed. Post data:", post);
+            Alert.alert("エラー", "ユーザーIDが見つかりません(古いデータの可能性があります)");
+        }
+    }
   };
 
   return (
@@ -129,7 +155,6 @@ export const Post = ({ post }: PostProps) => {
             <RenderTextWithHashtags text={post.text} style={styles.text} />
           </View>
 
-          {/* ★修正: 運動記録の表示エリア */}
           {post.activities && post.activities.length > 0 && (
             <View style={styles.activitiesContainer}>
               {post.activities.map((act, index) => (
@@ -174,10 +199,9 @@ const styles = StyleSheet.create({
   userName: { fontWeight: 'bold', fontSize: 16, color: '#333' },
   date: { fontSize: 12, color: '#888' },
   menuButton: { padding: 4 },
-  textArea: { marginBottom: 8 }, // 下のマージンを少し減らして記録との間隔を調整
+  textArea: { marginBottom: 8 }, 
   text: { fontSize: 15, lineHeight: 22, color: '#333' },
   
-  // ★追加: 運動記録用のスタイル
   activitiesContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -187,7 +211,7 @@ const styles = StyleSheet.create({
   activityBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#EFF6FF', // 薄い青
+    backgroundColor: '#EFF6FF',
     paddingVertical: 4,
     paddingHorizontal: 8,
     borderRadius: 8,
@@ -196,7 +220,7 @@ const styles = StyleSheet.create({
   },
   activityText: {
     fontSize: 13,
-    color: '#3B82F6', // 青文字
+    color: '#3B82F6',
   },
 
   postImage: { width: '100%', height: 200, borderRadius: 8, marginBottom: 12, resizeMode: 'cover' },

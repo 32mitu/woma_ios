@@ -1,15 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { 
   View, ActivityIndicator, StyleSheet, TextInput, TouchableOpacity, 
-  KeyboardAvoidingView, Platform, Text 
+  KeyboardAvoidingView, Platform, Text, Alert, ActionSheetIOS 
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocalSearchParams, useNavigation } from 'expo-router';
+import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router'; // useRouter追加
 import { GiftedChat, IMessage } from 'react-native-gifted-chat';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
 import { useAuth } from '../../src/features/auth/useAuth';
 import { useChat } from '../../src/features/dm/hooks/useChat';
+import { useSafety } from '../../src/hooks/useSafety'; // ★追加
 import { Ionicons } from '@expo/vector-icons';
 
 export default function ChatRoomScreen() {
@@ -17,13 +18,13 @@ export default function ChatRoomScreen() {
   const partnerId = Array.isArray(id) ? id[0] : id;
   const { userProfile } = useAuth();
   const navigation = useNavigation();
+  const router = useRouter(); // ★追加
+  const { reportContent, blockUser } = useSafety(); // ★追加
   
-  // ★自作入力バー用のステート
   const [inputText, setInputText] = useState('');
-
   const { messages, onSend, markAsRead } = useChat(userProfile?.uid, partnerId);
 
-  // 相手情報の取得
+  // 相手情報の取得 ＆ ヘッダーメニュー設定
   useEffect(() => {
     const fetchPartnerName = async () => {
       if (!partnerId) return;
@@ -31,12 +32,51 @@ export default function ChatRoomScreen() {
         const userDoc = await getDoc(doc(db, 'users', partnerId));
         if (userDoc.exists()) {
           const name = userDoc.data().username || 'チャット';
-          navigation.setOptions({ title: name });
+          
+          // ★ヘッダーにメニューボタンを追加
+          navigation.setOptions({ 
+            title: name,
+            headerRight: () => (
+              <TouchableOpacity onPress={showMenu} style={{ marginRight: 8 }}>
+                <Ionicons name="ellipsis-horizontal" size={24} color="#333" />
+              </TouchableOpacity>
+            )
+          });
         }
       } catch (e) { console.log(e); }
     };
     fetchPartnerName();
   }, [partnerId]);
+
+  // ★安全対策メニュー
+  const showMenu = () => {
+    if (!partnerId) return;
+    const options = ['キャンセル', '通報する', 'ブロックする'];
+    
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        { options, cancelButtonIndex: 0, destructiveButtonIndex: 2 },
+        (index) => handleMenuAction(index)
+      );
+    } else {
+      Alert.alert("メニュー", "", [
+        { text: 'キャンセル', style: 'cancel' },
+        { text: '通報する', onPress: () => handleMenuAction(1) },
+        { text: 'ブロックする', onPress: () => handleMenuAction(2) },
+      ]);
+    }
+  };
+
+  const handleMenuAction = (index: number) => {
+    if (index === 1) { // 通報
+      reportContent(partnerId, 'user');
+    } else if (index === 2) { // ブロック
+      blockUser(partnerId).then(() => {
+        // ブロックしたら一覧に戻る
+        router.back();
+      });
+    }
+  };
 
   // 既読処理
   useEffect(() => {
@@ -45,11 +85,12 @@ export default function ChatRoomScreen() {
     }
   }, [messages.length]);
 
-  // ★自作の送信処理
+  // 自作の送信処理
   const handleSendRaw = () => {
     if (!inputText.trim() || !userProfile?.uid) return;
 
-    // GiftedChatの形式に合わせてメッセージを作成
+    // もしブロックリストに含まれていたら送信させない等の制御も可能ですが
+    // 一旦標準の実装のみ行います
     const newMessage: IMessage = {
       _id: Math.random().toString(36).substring(7),
       text: inputText.trim(),
@@ -60,8 +101,8 @@ export default function ChatRoomScreen() {
       }
     };
 
-    onSend([newMessage]); // 送信フックを実行
-    setInputText('');     // 入力欄を空にする
+    onSend([newMessage]); 
+    setInputText('');     
   };
 
   if (!userProfile?.uid || !partnerId) {
@@ -85,7 +126,6 @@ export default function ChatRoomScreen() {
             user={{
               _id: userProfile.uid,
             }}
-            // ★重要: ライブラリ内蔵の入力を消す
             renderInputToolbar={() => null}
             minInputToolbarHeight={0}
             alwaysShowSend={false}
@@ -94,7 +134,6 @@ export default function ChatRoomScreen() {
           />
         </View>
 
-        {/* ★自作の入力バー */}
         <View style={styles.inputBar}>
           <TextInput
             style={styles.input}
@@ -121,9 +160,8 @@ export default function ChatRoomScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: 'white' },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'white' },
-  chatContainer: { flex: 1 }, // チャット部分を広げる
+  chatContainer: { flex: 1 },
   
-  // 自作入力バーのスタイル
   inputBar: {
     flexDirection: 'row',
     alignItems: 'flex-end',
@@ -142,7 +180,7 @@ const styles = StyleSheet.create({
     marginRight: 10,
     fontSize: 16,
     color: '#333',
-    maxHeight: 100, // 長文のときはスクロール
+    maxHeight: 100, 
   },
   sendButton: {
     width: 44,

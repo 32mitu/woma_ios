@@ -1,9 +1,8 @@
 import { useState, useEffect } from 'react';
-import { onAuthStateChanged, User, signOut as firebaseSignOut } from 'firebase/auth'; // ★ signOutを追加
+import { onAuthStateChanged, User, signOut as firebaseSignOut } from 'firebase/auth';
 import { doc, onSnapshot } from "firebase/firestore"; 
 import { auth, db } from '../../../firebaseConfig';
 
-// ユーザー情報の型定義
 type UserProfile = {
   uid: string;
   email: string | null;
@@ -12,6 +11,7 @@ type UserProfile = {
   height?: number | null;
   profileImageUrl?: string | null;
   bio?: string;
+  blockedUsers?: string[]; // ★追加: ブロックリスト
 };
 
 export const useAuth = () => {
@@ -48,6 +48,7 @@ export const useAuth = () => {
           height: data.height || null,
           profileImageUrl: data.profileImageUrl || null,
           bio: data.bio || "",
+          blockedUsers: data.blockedUsers || [], // ★追加
         });
       } else {
         setUserProfile({
@@ -65,7 +66,6 @@ export const useAuth = () => {
     return () => unsubscribeSnapshot();
   }, [user]);
 
-  // ★ 3. ログアウト関数を追加
   const signOut = async () => {
     try {
       await firebaseSignOut(auth);
@@ -75,6 +75,5 @@ export const useAuth = () => {
     }
   };
 
-  // ★ signOut を return に含める
   return { user, userProfile, loading, signOut };
 };
