@@ -5,45 +5,39 @@ import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { doc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
-
-// 【修正】ハンドラー設定はフックの外（ファイルのトップレベル）に移動
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
-});
+import { useRouter } from 'expo-router';
 
 export const usePushNotifications = (userId?: string) => {
+  const router = useRouter();
   const [expoPushToken, setExpoPushToken] = useState<string | undefined>('');
   const [notification, setNotification] = useState<Notifications.Notification | undefined>(undefined);
-  
-  // 【修正】型定義を any ではなく Subscription に変更
-  const notificationListener = useRef<Notifications.Subscription>();
-  const responseListener = useRef<Notifications.Subscription>();
+  const notificationListener = useRef<Notifications.EventSubscription>(null);
+  const responseListener = useRef<Notifications.EventSubscription>(null);
 
   useEffect(() => {
     registerForPushNotificationsAsync().then(token => {
+      // ログ削除
       setExpoPushToken(token);
       if (userId && token) {
         saveTokenToFirestore(userId, token);
       }
     });
 
-    // 通知を受信した時のリスナー
     notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
+      // ログ削除
       setNotification(notification);
     });
 
-    // 通知をタップした時のリスナー
     responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
-      console.log(response);
+      const data = response.notification.request.content.data;
+      if (data?.type === 'dm' && data?.partnerId) {
+        router.push(`/dm/${data.partnerId}`);
+      } else if (data?.type === 'like' || data?.type === 'comment') {
+        router.push('/(tabs)/home'); 
+      }
     });
 
     return () => {
-      // 【修正】 removeNotificationSubscription ではなく .remove() を使用
-      // また、オプショナルチェーン (?.) で存在チェックを行うことでエラーを回避
       notificationListener.current?.remove();
       responseListener.current?.remove();
     };
@@ -55,8 +49,8 @@ export const usePushNotifications = (userId?: string) => {
       await updateDoc(userRef, {
         fcmTokens: arrayUnion(token)
       });
-      console.log("Push Token saved:", token);
     } catch (error) {
+      // エラーログは残しておいたほうが安全ですが、邪魔ならここも消せます
       console.error("Error saving token:", error);
     }
   };
@@ -67,13 +61,13 @@ export const usePushNotifications = (userId?: string) => {
       content: {
         title: "今日の記録はまだですか？",
         body: "5分だけ歩きませんか？記録して自分を肯定しましょう！",
-        sound: true,
+        sound: 'default',
       },
       trigger: {
         hour: 20,
         minute: 0,
         repeats: true,
-      },
+      } as any,
     });
   };
 
@@ -82,7 +76,6 @@ export const usePushNotifications = (userId?: string) => {
 
 async function registerForPushNotificationsAsync() {
   let token;
-
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync('default', {
       name: 'default',
@@ -100,17 +93,12 @@ async function registerForPushNotificationsAsync() {
       finalStatus = status;
     }
     if (finalStatus !== 'granted') {
-      console.log('Push notification permission not granted');
       return;
     }
-    
     const projectId = Constants?.expoConfig?.extra?.eas?.projectId ?? Constants?.easConfig?.projectId;
-    
-    token = (await Notifications.getExpoPushTokenAsync({
-      projectId,
-    })).data;
+    token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
   } else {
-    console.log('Must use physical device for Push Notifications');
+    // シミュレーターの場合は静かに終了（ログ削除）
   }
 
   return token;

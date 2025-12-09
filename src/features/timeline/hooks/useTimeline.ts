@@ -1,44 +1,49 @@
 import { useState, useEffect } from 'react';
 import { collection, query, orderBy, onSnapshot, limit, where } from 'firebase/firestore';
 import { db } from '../../../../firebaseConfig';
+import { useAuth } from '../../auth/useAuth';
 
-// 引数に groupId (任意) を追加
 export const useTimeline = (groupId?: string) => {
   const [posts, setPosts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const { userProfile } = useAuth(); // 自分のプロフィール（ブロックリスト含む）
 
   useEffect(() => {
+    // 1. ブロックリストの確認ログ
+    const blockedUsers = userProfile?.blockedUsers || [];
+    console.log("🚫 [useTimeline] Current Block List:", blockedUsers);
+
     let q;
     const timelineRef = collection(db, "timeline");
 
     if (groupId) {
-      // グループ指定がある場合: そのグループIDを持つ投稿を抽出
-      q = query(
-        timelineRef,
-        where("groupId", "==", groupId),
-        orderBy("createdAt", "desc"),
-        limit(50)
-      );
+      q = query(timelineRef, where("groupId", "==", groupId), orderBy("createdAt", "desc"), limit(50));
     } else {
-      // 指定がない場合 (ホーム画面): 全体の投稿を表示
-      q = query(
-        timelineRef,
-        orderBy("createdAt", "desc"),
-        limit(50)
-      );
+      q = query(timelineRef, orderBy("createdAt", "desc"), limit(50));
     }
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const fetchedPosts = snapshot.docs.map(doc => {
+      // 2. 全取得
+      const allPosts = snapshot.docs.map(doc => {
         const data = doc.data();
         return {
           id: doc.id,
           ...data,
-          // Dateオブジェクトに変換
           createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(),
         };
       });
-      setPosts(fetchedPosts);
+
+      // 3. フィルタリング実行 & ログ確認
+      const filteredPosts = allPosts.filter(post => {
+        // 投稿にuserIdがない、またはブロックリストに含まれていなければ表示
+        const isBlocked = post.userId && blockedUsers.includes(post.userId);
+        if (isBlocked) {
+          console.log(`👻 [Filter] Hiding post ${post.id} from blocked user ${post.userId}`);
+        }
+        return !isBlocked;
+      });
+
+      setPosts(filteredPosts);
       setLoading(false);
     }, (error) => {
       console.error("タイムライン取得エラー:", error);
@@ -46,7 +51,7 @@ export const useTimeline = (groupId?: string) => {
     });
 
     return () => unsubscribe();
-  }, [groupId]); // groupIdが変わったら再実行
+  }, [groupId, userProfile?.blockedUsers]); // ★ここが重要: ブロックリストが変わったら再実行
 
   return { posts, loading };
 };

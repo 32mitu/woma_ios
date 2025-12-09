@@ -1,13 +1,8 @@
-import { Stack, usePathname } from 'expo-router';
-import { useEffect } from 'react';
+import { Stack } from 'expo-router';
+// useEffect と usePathname の import も不要になったので削除してOKですが、残しても害はありません
 
 export default function DMLayout() {
-  const pathname = usePathname();
-
-  useEffect(() => {
-    // これがログに出れば、フォルダ構成は正解です
-    console.log(`📂 [DMLayout] DMフォルダに入りました。現在のパス: ${pathname}`);
-  }, [pathname]);
+  // ログ出力処理を全削除
 
   return (
     <Stack>
@@ -24,7 +19,7 @@ export default function DMLayout() {
       <Stack.Screen 
         name="[id]" 
         options={{ 
-          title: 'チャット', // 詳細は画面内でsetOptionsする
+          title: 'チャット', 
           headerBackTitle: '一覧' 
         }} 
       />
