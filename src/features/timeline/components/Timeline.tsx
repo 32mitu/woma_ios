@@ -41,11 +41,12 @@ export const Timeline = ({ groupId }: Props) => {
               user: item.username || "名無し",
               userAvatar: item.profileImageUrl || item.userIcon || null,
               text: item.text || item.comment || "",
-              imageUrl: item.imageUrls?.[0] || null,
+              // ★変更: 1枚だけではなく、全画像を配列として渡す
+              imageUrls: item.imageUrls || (item.imageUrl ? [item.imageUrl] : []),
+              
               likes: item.likes || 0,
               comments: item.comments || 0,
               timestamp: item.createdAt,
-              // ★修正: 運動記録データ (activities) を渡す
               activities: item.activities || [], 
             }}
           />
@@ -58,21 +59,8 @@ export const Timeline = ({ groupId }: Props) => {
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  listContent: {
-    padding: 16,
-  },
-  center: {
-    padding: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  emptyText: {
-    fontSize: 16,
-    color: '#888',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
+  container: { flex: 1, backgroundColor: '#f8f9fa' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
+  listContent: { paddingBottom: 20 },
+  emptyText: { color: '#6B7280', fontSize: 16, marginBottom: 8 },
 });

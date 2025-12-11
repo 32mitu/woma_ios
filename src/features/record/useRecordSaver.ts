@@ -1,132 +1,97 @@
 import { useState } from 'react';
-import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { collection, serverTimestamp, doc, writeBatch } from "firebase/firestore";
-import { db } from "../../../firebaseConfig";
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { db, storage, auth } from '../../../firebaseConfig';
+import { useRouter } from 'expo-router';
 
 export const useRecordSaver = () => {
   const [saving, setSaving] = useState(false);
+  const router = useRouter();
 
-  const saveRecord = async (formData: any) => {
-    const {
-      userProfile, availableTypes, activities, weight, comment,
-      postToTimeline, imageUris, selectedGroupId
-    } = formData;
-
-    // --- 1. バリデーション ---
-    if (!activities || activities.length === 0) {
-      alert('運動内容を入力してください。');
-      return false;
+  const saveRecord = async (
+    data: {
+      activities: any[];
+      weight: string;
+      comment: string;
+      imageUris: string[];
+      postToTimeline: boolean;
     }
-    // 時間が0分の運動しかない場合はアラート（入力ミスの防止）
-    if (activities.every((act: any) => !act.duration || act.duration <= 0)) {
-      alert('少なくとも1つの運動で時間を入力してください。');
-      return false;
-    }
-    // ログインチェック
-    if (!userProfile?.uid) {
-      alert("ログインが必要です。");
-      return false;
-    }
-
+  ) => {
+    if (!auth.currentUser) return;
     setSaving(true);
-    const batch = writeBatch(db);
 
     try {
-      // --- 2. 画像アップロード ---
-      const imageUrls: string[] = [];
-      if (imageUris && imageUris.length > 0) {
-        const storage = getStorage();
-        for (const uri of imageUris) {
-          // URIからファイル名を取得
-          const filename = uri.substring(uri.lastIndexOf('/') + 1);
-          // fetchでBlob化 (React Native特有)
+      const { activities, weight, comment, imageUris, postToTimeline } = data;
+      const uid = auth.currentUser.uid;
+
+      // 1. 画像アップロード処理 (複数対応)
+      let uploadedImageUrls: string[] = [];
+      
+      if (imageUris.length > 0) {
+        const uploadPromises = imageUris.map(async (uri, index) => {
           const response = await fetch(uri);
           const blob = await response.blob();
-
-          // Storageパス: exercise_images/{uid}/{timestamp}_{filename}
-          const storageRef = ref(storage, `exercise_images/${userProfile.uid}/${Date.now()}_${filename}`);
+          
+          // ファイル名をユニークにする
+          const filename = `records/${uid}/${Date.now()}_${index}.jpg`;
+          const storageRef = ref(storage, filename);
+          
           await uploadBytes(storageRef, blob);
-          const url = await getDownloadURL(storageRef);
-          imageUrls.push(url);
-        }
+          return await getDownloadURL(storageRef);
+        });
+
+        uploadedImageUrls = await Promise.all(uploadPromises);
       }
 
-      // --- 3. 運動データ整形 (METs情報の結合) ---
-      const formattedActivities = activities.map((a: any) => {
-        const typeInfo = availableTypes.find((t: any) => t.id === a.typeId);
-        // 選択された強度に対応するMETs値を取得
-        let mets = 0;
-        if (typeInfo && typeInfo.metsValues) {
-            mets = typeInfo.metsValues[a.intensity] || 0;
+      // 2. データのサニタイズ (undefined対策)
+      // Firestoreは undefined を受け付けないため、確実に値が入るように整形
+      const sanitizedActivities = activities.map(act => ({
+        id: act.id,
+        name: act.name || '名称不明',
+        intensity: act.intensity || '中',
+        duration: Number(act.duration) || 0,
+        mets: Number(act.mets) || 0,
+        baseMets: {
+          low: Number(act.baseMets?.low) || 0,
+          mid: Number(act.baseMets?.mid) || 0,
+          high: Number(act.baseMets?.high) || 0,
         }
+      }));
 
-        return {
-          ...a,
-          name: (typeInfo && typeInfo.name) ? typeInfo.name : "不明な運動",
-          mets: mets
-        };
-      });
-
-      // ハッシュタグ抽出 (#タグ)
-      const hashtagRegex = /#\S+/g;
-      const hashtags = (comment.match(hashtagRegex) || []);
-
-      // --- 4. 運動記録 (exerciseRecords) 作成 ---
-      const exerciseRef = doc(collection(db, "exerciseRecords"));
-      batch.set(exerciseRef, {
-        userId: userProfile.uid, // ★ここが重要
-        activities: formattedActivities,
-        comment: comment.trim(),
-        imageUrls: imageUrls,
-        postToTimeline: postToTimeline,
+      // 3. 基本データの作成
+      const recordData = {
+        uid, // セキュリティルールで必須
+        activities: sanitizedActivities,
+        weight: weight ? Number(weight) : null,
+        comment: comment || '',
+        imageUrls: uploadedImageUrls, // 配列として保存
+        imageUrl: uploadedImageUrls.length > 0 ? uploadedImageUrls[0] : null, // 後方互換性
         createdAt: serverTimestamp(),
-        likes: [],
-        hashtags: hashtags,
-        groupId: selectedGroupId || null
-      });
+      };
 
-      // --- 5. タイムライン (timeline) 作成 ---
+      // 4. records コレクションに保存
+      const docRef = await addDoc(collection(db, 'records'), recordData);
+
+      // 5. タイムラインへの投稿 (ONの場合)
       if (postToTimeline) {
-        const timelineRef = doc(collection(db, "timeline"));
-        batch.set(timelineRef, {
-          userId: userProfile.uid, // ★最重要: これがないとブロック機能などで不具合が出ます
-          username: userProfile.username || "匿名",
-          userAvatar: userProfile.profileImageUrl || null, // ★追加: アイコンも保存
-          text: comment.trim(),
-          createdAt: serverTimestamp(),
-          exerciseId: exerciseRef.id,
-          imageUrls: imageUrls,
-          hashtags: hashtags,
-          groupId: selectedGroupId || null,
+        await addDoc(collection(db, 'timeline'), {
+          ...recordData,
+          recordId: docRef.id,
+          username: auth.currentUser.displayName || 'ユーザー',
+          userIcon: auth.currentUser.photoURL || null,
           likes: 0,
           comments: 0,
-          activities: formattedActivities
+          type: 'record',
+          imageUrls: uploadedImageUrls, 
         });
       }
 
-      // --- 6. 体重記録 (healthRecords & users) ---
-      if (weight && !isNaN(Number(weight))) {
-        const healthRecordRef = doc(collection(db, "healthRecords"));
-        const weightNum = Number(weight);
-        batch.set(healthRecordRef, {
-          userId: userProfile.uid,
-          weight: weightNum,
-          createdAt: serverTimestamp()
-        });
-        // ユーザー情報の最新体重も更新
-        const userRef = doc(db, "users", userProfile.uid);
-        batch.set(userRef, { weight: weightNum }, { merge: true });
-      }
+      // 完了後にホームへ戻る
+      router.replace('/(tabs)/home');
 
-      // --- 7. コミット ---
-      await batch.commit();
-
-      return true;
-
-    } catch (e: any) {
-      console.error("保存エラー:", e);
-      alert("保存に失敗しました。");
-      return false;
+    } catch (error) {
+      console.error("保存エラー:", error);
+      alert("記録の保存に失敗しました。もう一度お試しください。");
     } finally {
       setSaving(false);
     }
