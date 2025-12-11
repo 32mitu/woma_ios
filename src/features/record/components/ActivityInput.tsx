@@ -35,20 +35,37 @@ export const ActivityInput = ({ activity, onUpdate, onRemove, index }: Props) =>
               <Text style={[
                 styles.intensityText,
                 activity.intensity === level && styles.intensityTextActive
-              ]}>{level}</Text>
+              ]}>
+                {level}
+              </Text>
             </TouchableOpacity>
           ))}
         </View>
+      </View>
 
+      {/* 入力エリア（時間・歩数） */}
+      <View style={styles.inputsContainer}>
         {/* 時間入力 */}
-        <View style={styles.durationContainer}>
-          <Text style={styles.label}>時間(分):</Text>
+        <View style={styles.inputWrapper}>
+          <Text style={styles.label}>時間 (分)</Text>
           <TextInput
             style={styles.input}
-            value={String(activity.duration || '')}
-            onChangeText={(text) => onUpdate(activity.id, 'duration', Number(text))}
+            value={activity.duration?.toString()}
+            onChangeText={(text) => onUpdate(activity.id, 'duration', text)}
             keyboardType="numeric"
             placeholder="30"
+          />
+        </View>
+
+        {/* ★ 追加: 歩数入力 */}
+        <View style={styles.inputWrapper}>
+          <Text style={styles.label}>歩数 (歩)</Text>
+          <TextInput
+            style={styles.input}
+            value={activity.steps?.toString()}
+            onChangeText={(text) => onUpdate(activity.id, 'steps', text)}
+            keyboardType="numeric"
+            placeholder="0"
           />
         </View>
       </View>
@@ -80,6 +97,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    marginBottom: 12, // 下余白追加
   },
   intensityContainer: {
     flexDirection: 'row',
@@ -90,6 +108,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#6B7280',
     marginRight: 4,
+    marginBottom: 4,
   },
   intensityButton: {
     paddingVertical: 6,
@@ -105,20 +124,23 @@ const styles = StyleSheet.create({
     color: '#374151',
   },
   intensityTextActive: {
-    color: 'white',
+    color: '#FFFFFF',
     fontWeight: 'bold',
   },
-  durationContainer: {
+  // 新規スタイル
+  inputsContainer: {
     flexDirection: 'row',
-    alignItems: 'center',
+    gap: 12,
+  },
+  inputWrapper: {
+    flex: 1,
   },
   input: {
-    backgroundColor: 'white',
     borderWidth: 1,
-    borderColor: '#D1D5DB',
+    borderColor: '#E5E7EB',
     borderRadius: 6,
-    padding: 6,
-    width: 60,
-    textAlign: 'center',
+    padding: 8,
+    backgroundColor: '#fff',
+    textAlign: 'right',
   },
 });

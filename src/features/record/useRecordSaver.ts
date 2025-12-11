@@ -43,13 +43,13 @@ export const useRecordSaver = () => {
         uploadedImageUrls = await Promise.all(uploadPromises);
       }
 
-      // 2. データのサニタイズ (undefined対策)
-      // Firestoreは undefined を受け付けないため、確実に値が入るように整形
-      const sanitizedActivities = activities.map(act => ({
-        id: act.id,
-        name: act.name || '名称不明',
+      // 2. アクティビティデータの整形
+      const sanitizedActivities = activities.map((act) => ({
+        name: act.name,
+        type: act.type || 'other',
         intensity: act.intensity || '中',
         duration: Number(act.duration) || 0,
+        steps: Number(act.steps) || 0, // ★ ここで歩数を保存
         mets: Number(act.mets) || 0,
         baseMets: {
           low: Number(act.baseMets?.low) || 0,
@@ -82,16 +82,13 @@ export const useRecordSaver = () => {
           likes: 0,
           comments: 0,
           type: 'record',
-          imageUrls: uploadedImageUrls, 
         });
       }
 
-      // 完了後にホームへ戻る
-      router.replace('/(tabs)/home');
-
+      console.log('Record saved successfully!');
     } catch (error) {
-      console.error("保存エラー:", error);
-      alert("記録の保存に失敗しました。もう一度お試しください。");
+      console.error('Error saving record:', error);
+      alert('保存に失敗しました。もう一度お試しください。');
     } finally {
       setSaving(false);
     }

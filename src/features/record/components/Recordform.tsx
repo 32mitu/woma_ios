@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router'; // useLocalSearchParams 追加
 import { useAuth } from '../../auth/useAuth';
 import { useRecordSaver } from '../useRecordSaver';
 import { useExerciseTypes } from '../../../hooks/useExerciseTypes';
@@ -12,6 +12,11 @@ import { Ionicons } from '@expo/vector-icons';
 
 export const RecordForm = () => {
   const router = useRouter();
+  
+  // ★ URLパラメータから自動取得した歩数を受け取る
+  const params = useLocalSearchParams();
+  const autoSteps = params.autoSteps ? Number(params.autoSteps) : 0;
+
   const { userProfile } = useAuth();
   
   // マスタデータ取得 Hooks
@@ -30,57 +35,75 @@ export const RecordForm = () => {
   const [selectorVisible, setSelectorVisible] = useState(false);
   const [createVisible, setCreateVisible] = useState(false);
 
-  // 運動追加ロジック
-  const handleAddActivity = () => {
-    setSelectorVisible(true);
-  };
-
-  const handleSelectExercise = (type: any) => {
-    // ★修正: ここで undefined が入らないようにデフォルト値(0)を設定
-    setActivities([
-      ...activities,
-      {
-        id: Date.now().toString(),
-        name: type.name || '名称不明',
-        intensity: '中',
-        duration: 30, 
-        mets: type.mid ?? 0, // undefinedなら0にする
-        baseMets: { 
-          low: type.low ?? 0, 
-          mid: type.mid ?? 0, 
-          high: type.high ?? 0 
+  // ★ 自動歩数がある場合、初期アクティビティとしてセット
+  useEffect(() => {
+    if (autoSteps > 0 && activities.length === 0) {
+      setActivities([
+        {
+          id: Date.now().toString(),
+          name: 'ウォーキング', // デフォルト
+          type: 'walking',
+          intensity: '中',
+          duration: '', // 時間は不明なので空
+          steps: autoSteps, // ★ ここにセット
+          mets: 3.5,    // 概算METs
+          baseMets: { low: 2.5, mid: 3.5, high: 4.5 }
         }
-      }
-    ]);
+      ]);
+    }
+  }, [autoSteps]);
+
+  // ExerciseSelectorからの選択ハンドラ
+  const handleSelectExercise = (type: any) => {
+    const newActivity = {
+      id: Date.now().toString(),
+      name: type.name,
+      type: type.id, // カスタムの場合はID、プリセットの場合はkey
+      intensity: '中',
+      duration: '',
+      steps: '', // 新規追加時は空
+      mets: type.mets?.mid || 0,
+      baseMets: type.mets || { low: 0, mid: 0, high: 0 }
+    };
+    setActivities([...activities, newActivity]);
     setSelectorVisible(false);
   };
 
+  // アクティビティ情報の更新
   const handleUpdateActivity = (id: string, field: string, value: any) => {
     setActivities(activities.map(act => {
       if (act.id !== id) return act;
       
-      if (field === 'intensity') {
-        // 強度が変わったらMETsも更新
-        const newMets = act.baseMets[value === '低' ? 'low' : value === '高' ? 'high' : 'mid'] ?? 0;
-        return { ...act, intensity: value, mets: newMets };
+      const updated = { ...act, [field]: value };
+      
+      // 強度が変わったらMETsも更新
+      if (field === 'intensity' && act.baseMets) {
+        if (value === '低') updated.mets = act.baseMets.low;
+        if (value === '中') updated.mets = act.baseMets.mid;
+        if (value === '高') updated.mets = act.baseMets.high;
       }
-      return { ...act, [field]: value };
+      
+      return updated;
     }));
   };
 
+  // 削除
   const handleRemoveActivity = (id: string) => {
     setActivities(activities.filter(a => a.id !== id));
   };
 
+  // 新規種目作成
   const handleCreateSubmit = async (data: { name: string, low: number, mid: number, high: number }) => {
     await createNewExerciseType(data);
     setCreateVisible(false);
+    // 自動的に選択状態にするなどは省略（必要なら実装）
+    Alert.alert('完了', '新しい運動を作成しました。リストから選択してください。');
   };
 
+  // 保存処理
   const handleSave = async () => {
-    // バリデーション
-    if (activities.length === 0 && !comment.trim() && imageUris.length === 0 && !weight) {
-      Alert.alert('エラー', '記録する内容（運動、体重、コメント、写真のいずれか）を入力してください');
+    if (activities.length === 0 && !weight && !comment && imageUris.length === 0) {
+      Alert.alert('エラー', '記録する内容がありません');
       return;
     }
 
@@ -91,19 +114,22 @@ export const RecordForm = () => {
       imageUris,
       postToTimeline
     });
+    
+    // 成功したら戻る (saveRecord内でToast等は処理済と仮定、またはここで戻る)
+    router.back();
   };
 
   return (
     <View style={styles.container}>
-      <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
         <Text style={styles.pageTitle}>今日の記録</Text>
 
-        {/* 運動リストセクション */}
+        {/* 運動リスト */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>運動メニュー</Text>
+          <Text style={styles.sectionTitle}>運動</Text>
           
           {activities.length === 0 ? (
-            <Text style={styles.emptyText}>まだ追加されていません</Text>
+            <Text style={styles.emptyText}>まだ運動が選択されていません</Text>
           ) : (
             activities.map((act, index) => (
               <ActivityInput
@@ -116,40 +142,38 @@ export const RecordForm = () => {
             ))
           )}
 
-          <TouchableOpacity style={styles.addButton} onPress={handleAddActivity}>
+          <TouchableOpacity style={styles.addButton} onPress={() => setSelectorVisible(true)}>
             <Ionicons name="add" size={20} color="#3B82F6" />
             <Text style={styles.addText}>運動を追加する</Text>
           </TouchableOpacity>
         </View>
 
-        {/* 入力フォーム */}
+        {/* その他の入力 (体重、コメント、画像) */}
         <RecordFormInputs
-          weight={weight}
-          setWeight={setWeight}
-          comment={comment}
-          setComment={setComment}
-          imageUris={imageUris}
-          setImageUris={setImageUris}
-          postToTimeline={postToTimeline}
-          setPostToTimeline={setPostToTimeline}
+          weight={weight} setWeight={setWeight}
+          comment={comment} setComment={setComment}
+          imageUris={imageUris} setImageUris={setImageUris}
+          postToTimeline={postToTimeline} setPostToTimeline={setPostToTimeline}
         />
 
-        {/* 保存ボタン */}
+        {/* 送信ボタン */}
         <TouchableOpacity 
-          style={[styles.submitButton, saving && styles.disabled]} 
+          style={[styles.submitButton, saving && styles.disabledButton]} 
           onPress={handleSave}
           disabled={saving}
         >
           {saving ? (
             <ActivityIndicator color="#fff" />
           ) : (
-            <Text style={styles.submitText}>記録を保存</Text>
+            <>
+              <Ionicons name="checkmark-circle-outline" size={24} color="#fff" />
+              <Text style={styles.submitButtonText}>記録する (えらい！)</Text>
+            </>
           )}
         </TouchableOpacity>
-
       </ScrollView>
 
-      {/* 運動選択モーダル */}
+      {/* モーダル群 */}
       <ExerciseSelector
         visible={selectorVisible}
         availableTypes={availableTypes}
@@ -161,7 +185,6 @@ export const RecordForm = () => {
         }}
       />
 
-      {/* 新規作成モーダル */}
       <CreateExerciseTypeForm
         visible={createVisible}
         onSubmit={handleCreateSubmit}
@@ -184,9 +207,10 @@ const styles = StyleSheet.create({
   },
   addText: { color: '#3B82F6', fontWeight: 'bold', marginLeft: 8 },
   submitButton: {
-    backgroundColor: '#3B82F6', padding: 16, borderRadius: 12, alignItems: 'center', marginTop: 10,
-    shadowColor: '#3B82F6', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4
+    backgroundColor: '#3B82F6', flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    padding: 16, borderRadius: 12, marginTop: 20,
+    shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3
   },
-  disabled: { backgroundColor: '#93C5FD' },
-  submitText: { color: 'white', fontWeight: 'bold', fontSize: 16 },
+  disabledButton: { backgroundColor: '#93C5FD' },
+  submitButtonText: { color: '#fff', fontSize: 18, fontWeight: 'bold', marginLeft: 8 },
 });

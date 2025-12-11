@@ -1,64 +1,51 @@
-import { useState, useEffect } from 'react';
-import { Platform, AppState, AppStateStatus } from 'react-native';
 import AppleHealthKit, { HealthValue, HealthKitPermissions } from 'react-native-health';
+import { Platform } from 'react-native';
 
 const permissions: HealthKitPermissions = {
   permissions: {
-    read: [AppleHealthKit?.Constants?.Permissions?.Steps], // オプショナルチェーンを追加
+    read: [AppleHealthKit.Constants.Permissions.Steps],
     write: [],
   },
 };
 
 export const useHealthKit = () => {
-  const [dailySteps, setDailySteps] = useState(0);
-  const [isAvailable, setIsAvailable] = useState(false);
+  const isAvailable = Platform.OS === 'ios';
 
-  useEffect(() => {
-    // 【重要】iOS以外、またはHealthKitがロードできない環境（Expo Goなど）では何もしない
-    if (Platform.OS !== 'ios' || !AppleHealthKit || !AppleHealthKit.initHealthKit) {
-      console.log('HealthKit is not available in this environment.');
-      // ★ 開発用にダミーデータを見たい場合はここでセットできます
-      // setDailySteps(5678); 
-      // setIsAvailable(true);
-      return;
-    }
+  // 1. 初期化・権限リクエスト
+  const initHealthKit = async (): Promise<boolean> => {
+    if (!isAvailable) return false;
+    
+    return new Promise((resolve) => {
+      AppleHealthKit.initHealthKit(permissions, (error: string) => {
+        if (error) {
+          console.log('[HealthKit] Error:', error);
+          resolve(false);
+        } else {
+          resolve(true);
+        }
+      });
+    });
+  };
 
-    // 歩数取得関数
-    const fetchSteps = () => {
+  // 2. 今日の歩数を取得
+  const getTodaySteps = async (): Promise<number> => {
+    if (!isAvailable) return 0;
+
+    return new Promise((resolve) => {
       const options = {
-        date: new Date().toISOString(),
-        includeManuallyAdded: true,
+        includeManuallyAdded: true, // 手入力も含む
       };
-
-      AppleHealthKit.getStepCount(options, (err: Object, results: HealthValue) => {
+      
+      AppleHealthKit.getStepCount(options, (err: string, results: HealthValue) => {
         if (err) {
-          console.log('Error getting steps:', err);
+          console.log('[HealthKit] Step Count Error:', err);
+          resolve(0);
           return;
         }
-        setDailySteps(results.value);
+        resolve(results.value);
       });
-    };
-
-    // 初期化
-    AppleHealthKit.initHealthKit(permissions, (error: string) => {
-      if (error) {
-        console.log('[ERROR] Cannot grant permissions!');
-        return;
-      }
-      setIsAvailable(true);
-      fetchSteps();
     });
+  };
 
-    const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
-      if (nextAppState === 'active') {
-        fetchSteps();
-      }
-    });
-
-    return () => {
-      subscription.remove();
-    };
-  }, []);
-
-  return { dailySteps, isAvailable };
+  return { initHealthKit, getTodaySteps, isAvailable };
 };

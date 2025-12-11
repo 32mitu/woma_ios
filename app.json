@@ -17,7 +17,12 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.kouheimitsumura.app",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSHealthShareUsageDescription": "このアプリは歩数データを取得して、運動記録の入力を補助するために使用します。",
+        "NSHealthUpdateUsageDescription": "このアプリは運動データをヘルスケアに記録するために使用します。"
+      },
+      "entitlements": {
+        "com.apple.developer.healthkit": true
       }
     },
     "android": {
@@ -27,13 +32,17 @@
       },
       "edgeToEdgeEnabled": true
     },
-    "web": {
-      "favicon": "./assets/favicon.png"
-    },
     "plugins": [
       "expo-router",
       "expo-dev-client",
-      "react-native-health"
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "15.1"
+          }
+        }
+      ]
     ],
     "extra": {
       "router": {},
