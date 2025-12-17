@@ -34,33 +34,52 @@ export const Timeline = ({ groupId }: Props) => {
       <FlatList
         data={posts}
         scrollEnabled={!groupId}
-        renderItem={({ item }) => (
-          <Post 
-            post={{
-              id: item.id,
-              user: item.username || "名無し",
-              userAvatar: item.profileImageUrl || item.userIcon || null,
-              text: item.text || item.comment || "",
-              // ★変更: 1枚だけではなく、全画像を配列として渡す
-              imageUrls: item.imageUrls || (item.imageUrl ? [item.imageUrl] : []),
-              
-              likes: item.likes || 0,
-              comments: item.comments || 0,
-              timestamp: item.createdAt,
-              activities: item.activities || [], 
-            }}
-          />
-        )}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
+        renderItem={({ item }) => {
+          // 投稿データ内のIDフィールドの揺らぎを吸収
+          const targetUserId = item.userId || item.uid || item.authorId || item.senderId || item.user?._id;
+
+          return (
+            <Post 
+              post={{
+                id: item.id,
+                userId: targetUserId, // ★最重要: ユーザーIDさえあれば復元可能
+                
+                // 念のため投稿データ内の情報も渡すが、Post側で上書き取得する
+                text: item.text || item.comment || "",
+                imageUrls: item.imageUrls || (item.imageUrl ? [item.imageUrl] : []),
+                
+                likes: item.likes || 0,
+                comments: item.comments || 0,
+                timestamp: item.createdAt,
+                activities: item.activities || [], 
+              }}
+            />
+          );
+        }}
       />
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8f9fa' },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
-  listContent: { paddingBottom: 20 },
-  emptyText: { color: '#6B7280', fontSize: 16, marginBottom: 8 },
+  container: {
+    flex: 1,
+    backgroundColor: '#f8fafc',
+  },
+  center: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  listContent: {
+    paddingBottom: 80, 
+  },
+  emptyText: {
+    fontSize: 16,
+    color: '#9ca3af',
+    marginBottom: 8,
+  },
 });

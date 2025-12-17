@@ -16,8 +16,12 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.kouheimitsumura.app",
+      "buildNumber": "5",
+      "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSHealthShareUsageDescription": "運動記録を自動入力するために歩数データを利用します。",
+        "NSHealthUpdateUsageDescription": "運動データを記録するためにヘルスケアデータを利用します。"
       }
     },
     "android": {
@@ -25,7 +29,8 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "package": "com.kouheimitsumura.app"
     },
     "web": {
       "favicon": "./assets/favicon.png"
