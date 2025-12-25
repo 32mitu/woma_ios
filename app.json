@@ -3,9 +3,9 @@
     "name": "woma-mobile",
     "slug": "woma-mobile",
     "scheme": "woma-mobile",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/home_icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": false,
     "splash": {
@@ -61,6 +61,14 @@
           "ios": {
             "useFrameworks": "static"
           }
+        }
+      ],
+      [
+        "react-native-health",
+        {
+          "isVitalsEnabled": false,
+          "isSleepEnabled": false,
+          "isWorkoutEnabled": false
         }
       ]
     ],

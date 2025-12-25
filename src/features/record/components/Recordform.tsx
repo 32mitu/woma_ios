@@ -94,7 +94,8 @@ export const RecordForm = () => {
       const steps = await getTodaySteps();
       
       if (!steps || steps === 0) {
-        Alert.alert("通知", "今日の歩数データが見つかりませんでした。(または0歩)");
+        // 文言変更：情報源を明確に
+        Alert.alert("Appleヘルスケア", "今日の歩数データが見つかりませんでした。(または0歩)");
         return;
       }
 
@@ -104,7 +105,7 @@ export const RecordForm = () => {
         const updated = [...activities];
         updated[walkIndex].steps = steps;
         setActivities(updated);
-        Alert.alert("更新完了", `既存のウォーキング記録に ${steps.toLocaleString()}歩 を設定しました。`);
+        Alert.alert("Apple Health連携", `既存のウォーキング記録に ${steps.toLocaleString()}歩 を設定しました。`);
       } else {
         // マスタから「ウォーキング」を探す
         const walkType = availableTypes.find(t => t.name.includes('ウォーキング'));
@@ -137,11 +138,12 @@ export const RecordForm = () => {
           }
         };
         setActivities([...activities, newActivity]);
-        Alert.alert("連携完了", `ヘルスケアから ${steps.toLocaleString()}歩 を取得しました。`);
+        // 文言変更：情報源を明確に
+        Alert.alert("Apple Health連携", `ヘルスケアから ${steps.toLocaleString()}歩 を取得しました。`);
       }
     } catch (error) {
       console.error("HealthKit Error:", error);
-      Alert.alert("エラー", "ヘルスケアデータの取得に失敗しました。設定 > プライバシー > ヘルスケア から権限を確認してください。");
+      Alert.alert("エラー", "Appleヘルスケアデータの取得に失敗しました。設定 > プライバシー > ヘルスケア から権限を確認してください。");
     }
   };
 
@@ -171,7 +173,7 @@ export const RecordForm = () => {
         <Text style={styles.pageTitle}>今日の記録</Text>
 
         <View style={styles.section}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
             <Text style={styles.sectionTitle}>運動メニュー</Text>
             
             <TouchableOpacity 
@@ -182,12 +184,18 @@ export const RecordForm = () => {
               {healthLoading ? (
                 <ActivityIndicator size="small" color="white" />
               ) : (
-                <Ionicons name="fitness" size={16} color="white" />
+                // アイコンをハートマークに変更 (HealthKitらしさの強調)
+                <Ionicons name="heart" size={16} color="white" />
               )}
               <Text style={styles.healthButtonText}>
-                {healthLoading ? '取得中...' : 'iPhoneの歩数を取得'}
+                {healthLoading ? '取得中...' : 'Appleヘルスケアから取得'}
               </Text>
             </TouchableOpacity>
+          </View>
+
+          {/* 審査対策: クレジット表記を明示的に追加 */}
+          <View style={{ alignItems: 'flex-end', marginBottom: 12 }}>
+             <Text style={styles.attributionText}>Data from Apple Health</Text>
           </View>
           
           {activities.length === 0 ? (
@@ -277,7 +285,7 @@ const styles = StyleSheet.create({
   healthButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#10B981', 
+    backgroundColor: '#FA586A', // Apple Healthに近いピンク/赤系の色に変更するとより分かりやすい(任意)
     paddingVertical: 6,
     paddingHorizontal: 12,
     borderRadius: 20,
@@ -288,4 +296,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: 'bold',
   },
+  // 新規追加スタイル
+  attributionText: {
+    fontSize: 10,
+    color: '#999',
+    marginTop: 2,
+    marginRight: 4
+  }
 });
